@@ -1,7 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-
   <PropertyGroup>
     <ProjectGuid>{E3C630FE-AF89-4C95-B1B9-2409B1107208}</ProjectGuid>
     <OutputType>Library</OutputType>
@@ -31,14 +30,11 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
-
   <ItemGroup>
     <Reference Include="System" />
-    
     <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <Aliases>FrameworkV1</Aliases>
     </Reference>
-
     <ProjectReference Include="$(RepoRoot)src\Adapter\PlatformServices.Interface\PlatformServices.Interface.csproj">
       <Project>{BBC99A6B-4490-49DD-9C12-AF2C1E95576E}</Project>
       <Name>PlatformServices.Interface</Name>
@@ -61,21 +57,17 @@
       <Name>MSTest.CoreAdapter.TestUtilities</Name>
     </ProjectReference>
   </ItemGroup>
-
   <ItemGroup>
-    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="$(MicrosoftNETTestSdkVersion)" targetFramework="net451" />
-    
+    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.0.0-dev" targetFramework="net451" />
     <PackageReference Include="System.Collections.Immutable" Version="$(SystemCollectionsImmutableVersion)" />
     <PackageReference Include="System.Reflection.Metadata" Version="$(SystemReflectionMetadataVersion)" />
     <PackageReference Include="NuGet.Frameworks" Version="$(NuGetFrameworksVersion)" />
     <PackageReference Include="Castle.Core" Version="$(CastleCoreVersion)" />
     <PackageReference Include="Moq" Version="$(MoqVersion)" />
-
     <PackageReference Include="StyleCop.Analyzers" Version="$(StyleCopAnalyzersVersion)" PrivateAssets="all">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
   <ItemGroup>
     <Compile Include="$(RepoRoot)test\UnitTests\PlatformServices.Shared.Unit.Tests\netstandard1.0\ns10AssemblyAttributes.cs">
       <Link>Services\ns10AssemblyAttributes.cs</Link>
@@ -105,10 +97,8 @@
       <Link>Services\ns10ThreadOperationsTests.cs</Link>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-
     <None Include="app.config" />
   </ItemGroup>
-
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

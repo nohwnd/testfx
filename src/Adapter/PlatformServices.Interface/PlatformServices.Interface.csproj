@@ -1,7 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-
   <PropertyGroup>
     <ProjectGuid>{BBC99A6B-4490-49DD-9C12-AF2C1E95576E}</ProjectGuid>
     <OutputType>Library</OutputType>
@@ -28,7 +27,6 @@
     <WarningLevel>4</WarningLevel>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-
   <ItemGroup>
     <ProjectReference Include="$(RepoRoot)src\TestFramework\MSTest.Core\MSTest.Core.csproj">
       <Project>{7252d9e3-267d-442c-96bc-c73aef3241d6}</Project>
@@ -41,10 +39,8 @@
       <Private>False</Private>
     </ProjectReference>
   </ItemGroup>
-  
   <ItemGroup>
-    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="$(MicrosoftNETTestSdkVersion)" />
-
+    <PackageReference Include="Microsoft.TestPlatform.ObjectModel" Version="17.0.0-dev" />
     <PackageReference Include="MicroBuild.Core" Version="$(MicroBuildCoreVersion)" PrivateAssets="all">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -52,7 +48,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
   <ItemGroup>
     <Compile Include="IReflectionOperations.cs" />
     <Compile Include="IThreadOperations.cs" />
@@ -68,9 +63,7 @@
     <Compile Include="ITraceListenerManager.cs" />
     <Compile Include="ObjectModel\ITestMethod.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-
     <None Include="app.config" />
   </ItemGroup>
-  
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
 </Project>
