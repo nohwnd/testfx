@@ -9,12 +9,14 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
     using System;
     using System.Collections.Generic;
     using System.Collections.ObjectModel;
+    using System.Diagnostics;
     using System.Globalization;
     using System.Linq;
     using System.Reflection;
     using System.Text;
+    using System.Threading.Tasks;
     using System.Xml;
-
+    using Castle.Core.Internal;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Helpers;
@@ -44,7 +46,6 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
             this.warnings = new List<string>();
 
             this.testablePlatformServiceProvider = new TestablePlatformServiceProvider();
-            PlatformServiceProvider.Instance = this.testablePlatformServiceProvider;
         }
 
         [TestCleanup]
@@ -234,162 +235,35 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
         #region EnumerateAssembly tests
 
         [TestMethodV1]
-        public void EnumerateAssemblyShouldReturnEmptyListWhenNoDeclaredTypes()
+        public void EnumearateTypePerf()
         {
-            var mockAssembly = CreateMockTestableAssembly();
+            // var asm = @"C:\t\TestProject13_for_mstest\TestProject1\bin\Debug\net452\TestProject1.dll";
+            var asm = @"C:\t\TestProject13_for_mstest\TestProject5\bin\Debug\net472\TestProject5.dll";
+            var assembly = Assembly.LoadFrom(asm);
 
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes).Returns(new List<TypeInfo>());
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
+            var groups = assembly.GetTypes().Where(n => n.Name.StartsWith("UnitTest")).Select(t => new { Type = t, Methods = t.GetMethods().Where(mm => mm.Name.StartsWith("TestMethod")).ToList() }).ToList();
 
-            Assert.AreEqual(0, this.assemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings).Count);
-        }
+            var rh = new ReflectHelper();
+            var warnings = new List<string>();
+            var sw = Stopwatch.StartNew();
+            var c = 0;
+            var assemblyAttributes = assembly.GetCustomAttributes().ToList();
 
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldReturnEmptyListWhenNoTestElementsInAType()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
+            foreach (var g in groups)
+            {
+                var typeAttributes = g.Type.GetCustomAttributes().ToList();
+                var te = new TypeEnumerator(typeof(A), typeof(A).Assembly.FullName, rh, new TypeValidator(g.Type, typeAttributes, rh, discoverInternals: false), new TestMethodValidator(g.Type, typeAttributes, rh, false), assemblyAttributes, typeAttributes);
 
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(DummyTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out this.warnings))
-                .Returns((ICollection<UnitTestElement>)null);
+                foreach (var m in g.Methods)
+                {
+                    c++;
 
-            Assert.AreEqual(0, this.assemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings).Count);
-        }
+                    te.GetTestFromMethod(m, true, warnings);
+                }
+            }
 
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldReturnTestElementsForAType()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
-            var unitTestElement = new UnitTestElement(new TestMethod("DummyMethod", "DummyClass", "DummyAssembly", false));
-
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(DummyTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out this.warnings))
-                .Returns(new Collection<UnitTestElement> { unitTestElement });
-
-            var testElements = testableAssemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings);
-
-            CollectionAssert.AreEqual(new Collection<UnitTestElement> { unitTestElement }, testElements.ToList());
-        }
-
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldReturnMoreThanOneTestElementForAType()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
-            var unitTestElement = new UnitTestElement(new TestMethod("DummyMethod", "DummyClass", "DummyAssembly", false));
-            var expectedTestElements = new Collection<UnitTestElement> { unitTestElement, unitTestElement };
-
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(DummyTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out this.warnings))
-                .Returns(expectedTestElements);
-
-            var testElements = testableAssemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings);
-
-            CollectionAssert.AreEqual(expectedTestElements, testElements.ToList());
-        }
-
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldReturnMoreThanOneTestElementForMoreThanOneType()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
-            var unitTestElement = new UnitTestElement(new TestMethod("DummyMethod", "DummyClass", "DummyAssembly", false));
-            var expectedTestElements = new Collection<UnitTestElement> { unitTestElement, unitTestElement };
-
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(DummyTestClass).GetTypeInfo(), typeof(DummyTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out this.warnings))
-                .Returns(expectedTestElements);
-
-            var testElements = testableAssemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings);
-
-            expectedTestElements.Add(unitTestElement);
-            expectedTestElements.Add(unitTestElement);
-            CollectionAssert.AreEqual(expectedTestElements, testElements.ToList());
-        }
-
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldNotLogWarningsIfNonePresent()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
-            ICollection<string> warningsFromTypeEnumerator = null;
-
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(InternalTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out warningsFromTypeEnumerator));
-
-            testableAssemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings);
-            Assert.AreEqual(0, this.warnings.Count);
-        }
-
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldLogWarningsIfPresent()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
-            ICollection<string> warningsFromTypeEnumerator = new Collection<string>();
-
-            warningsFromTypeEnumerator.Add("DummyWarning");
-
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(InternalTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out warningsFromTypeEnumerator));
-
-            testableAssemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings);
-
-            CollectionAssert.AreEqual(warningsFromTypeEnumerator.ToList(), this.warnings.ToList());
-        }
-
-        [TestMethodV1]
-        public void EnumerateAssemblyShouldHandleExceptionsWhileEnumeratingAType()
-        {
-            var mockAssembly = CreateMockTestableAssembly();
-            var testableAssemblyEnumerator = new TestableAssemblyEnumerator();
-            var exception = new Exception("TypeEnumerationException");
-
-            // Setup mocks
-            mockAssembly.Setup(a => a.DefinedTypes)
-                .Returns(new List<TypeInfo>() { typeof(InternalTestClass).GetTypeInfo() });
-            this.testablePlatformServiceProvider.MockFileOperations.Setup(fo => fo.LoadAssembly("DummyAssembly", false))
-                .Returns(mockAssembly.Object);
-            testableAssemblyEnumerator.MockTypeEnumerator.Setup(te => te.Enumerate(out this.warnings)).Throws(exception);
-
-            testableAssemblyEnumerator.EnumerateAssembly("DummyAssembly", out this.warnings);
-
-            CollectionAssert.Contains(
-                this.warnings.ToList(),
-                string.Format(
-                    CultureInfo.CurrentCulture,
-                    Resource.CouldNotInspectTypeDuringDiscovery,
-                    typeof(InternalTestClass),
-                    "DummyAssembly",
-                    exception.Message));
+            Console.WriteLine(c);
+            Console.WriteLine(sw.Elapsed);
         }
 
         private static Mock<TestableAssembly> CreateMockTestableAssembly()
@@ -439,11 +313,24 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
 
         internal Mock<TypeEnumerator> MockTypeEnumerator { get; set; }
 
-        internal override TypeEnumerator GetTypeEnumerator(Type type, string assemblyFileName, bool discoverInternals)
+        internal override TypeEnumerator GetTypeEnumerator(IReadOnlyCollection<Attribute> assemblyAttributes, string assemblyFileName, Type type, IReadOnlyCollection<Attribute> typeAttributes, bool discoverInternals)
         {
             return this.MockTypeEnumerator.Object;
         }
     }
 
     #endregion
+
+    [FrameworkV2::Microsoft.VisualStudio.TestTools.UnitTesting.TestClass]
+#pragma warning disable SA1202 // Elements must be ordered by access
+    public class A
+
+#pragma warning restore SA1202 // Elements must be ordered by access
+    {
+        [FrameworkV2::Microsoft.VisualStudio.TestTools.UnitTesting.TestMethod]
+        public Task B()
+        {
+            return Task.FromResult(0);
+        }
+    }
 }

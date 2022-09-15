@@ -98,6 +98,11 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Helpers
             return this.HasAttributeDerivedFrom(memberInfo, baseAttributeType, inherit);
         }
 
+        public IReadOnlyCollection<Attribute> GetCustomAttributes(Assembly assembly)
+        {
+            return assembly.GetCustomAttributes().ToList();
+        }
+
         /// <summary>
         /// Returns true when specified class/member has attribute derived from specific attribute.
         /// </summary>
@@ -340,23 +345,12 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Helpers
         /// <summary>
         /// Get categories applied to the test method
         /// </summary>
-        /// <param name="categoryAttributeProvider">The member to inspect.</param>
-        /// <param name="owningType">The reflected type that owns <paramref name="categoryAttributeProvider"/>.</param>
+        /// <param name="method">The member to inspect.</param>
+        /// <param name="type">type.</param>
         /// <returns>Categories defined.</returns>
-        internal virtual string[] GetCategories(MemberInfo categoryAttributeProvider, Type owningType)
+        internal virtual string[] GetCategories(MethodInfo method, Type type)
         {
-            var categories = this.GetCustomAttributesRecursively(categoryAttributeProvider, owningType, typeof(TestCategoryBaseAttribute));
-            List<string> testCategories = new List<string>();
-
-            if (categories != null)
-            {
-                foreach (TestCategoryBaseAttribute category in categories)
-                {
-                    testCategories.AddRange(category.TestCategories);
-                }
-            }
-
-            return testCategories.ToArray();
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -410,23 +404,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Helpers
         /// <returns>The categories of the specified type on the method. </returns>
         internal IEnumerable<object> GetCustomAttributesRecursively(MemberInfo attributeProvider, Type owningType, Type type)
         {
-            var categories = this.GetCustomAttributes(attributeProvider, typeof(TestCategoryBaseAttribute));
-            if (categories != null)
-            {
-                categories = categories.Concat(this.GetCustomAttributes(owningType.GetTypeInfo(), typeof(TestCategoryBaseAttribute))).ToArray();
-            }
-
-            if (categories != null)
-            {
-                categories = categories.Concat(this.GetCustomAttributeForAssembly(owningType.GetTypeInfo(), typeof(TestCategoryBaseAttribute))).ToArray();
-            }
-
-            if (categories != null)
-            {
-                return categories;
-            }
-
-            return Enumerable.Empty<object>();
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -568,6 +546,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Helpers
         /// <returns>List of traits.</returns>
         internal virtual IEnumerable<Trait> GetTestPropertiesAsTraits(MemberInfo testPropertyProvider)
         {
+            // blargh, this recurses..... and takes 100ms...
             var testPropertyAttributes = this.GetTestPropertyAttributes(testPropertyProvider);
 
             foreach (TestPropertyAttribute testProperty in testPropertyAttributes)

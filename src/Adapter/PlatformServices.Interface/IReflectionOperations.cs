@@ -35,5 +35,37 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices.Int
         /// <param name="type"> The attribute type. </param>
         /// <returns> The list of attributes of the given type on the member. Empty list if none found. </returns>
         object[] GetCustomAttributes(Assembly assembly, Type type);
+
+        /// <summary>
+        /// Gets all the custom attributes of a given assembly.
+        /// </summary>
+        /// <param name="assembly"> The assembly. </param>
+        /// <returns> The list of attributes. Empty list if none found. </returns>
+        object[] GetCustomAttributes(Assembly assembly);
+
+        /// <summary>
+        /// Gets all the custom attributes of a given type.
+        /// </summary>
+        /// <param name="type"> The assembly. </param>
+        /// <returns> The list of attributes. Empty list if none found. </returns>
+        object[] GetCustomAttributes(Type type);
+
+        /// <summary>
+        /// Check if an attribute is defined.
+        /// </summary>
+        /// <param name="memberInfo"> The member. </param>
+        /// <param name="type"> The attribute type. </param>
+        /// <param name="inherit"> True to inspect the ancestors of element; otherwise, false. </param>
+        /// <returns> True if the attribute is found. </returns>
+        bool IsAttributeDefined(MemberInfo memberInfo, Type type, bool inherit);
+
+        /// <summary>
+        /// Check if an attribute is defined.
+        /// </summary>
+        /// <param name="type"> The type. </param>
+        /// <param name="attributeType"> The attribute type. </param>
+        /// <param name="inherit"> True to inspect the ancestors of element; otherwise, false. </param>
+        /// <returns> True if the attribute is found. </returns>
+        bool IsAttributeDefined(Type type, Type attributeType, bool inherit);
     }
 }

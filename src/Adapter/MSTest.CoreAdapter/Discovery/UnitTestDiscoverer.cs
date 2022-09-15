@@ -3,8 +3,10 @@
 
 namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter
 {
+    using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.ObjectModel;
     using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -58,7 +60,25 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter
             ITestCaseDiscoverySink discoverySink,
             IDiscoveryContext discoveryContext)
         {
-            var testElements = this.assemblyEnumeratorWrapper.GetTests(source, discoveryContext?.RunSettings, out var warnings);
+            Func<List<UnitTestElement>, List<string>, bool> flushTests = (ut, ws) =>
+            {
+                // log the warnings
+                foreach (var warning in ws)
+                {
+                    PlatformServiceProvider.Instance.AdapterTraceLogger.LogInfo(
+                        "MSTestDiscoverer: Warning during discovery from {0}. {1} ",
+                        source,
+                        warning);
+                    var message = string.Format(CultureInfo.CurrentCulture, Resource.DiscoveryWarning, source, warning);
+                    logger.SendMessage(TestMessageLevel.Warning, message);
+                }
+
+                this.SendTestCases(source, ut, discoverySink, discoveryContext, logger);
+
+                return true;
+            };
+
+            var testElements = this.assemblyEnumeratorWrapper.GetTests(source, discoveryContext?.RunSettings, flushTests, out var warnings);
 
             // log the warnings
             foreach (var warning in warnings)
@@ -82,7 +102,11 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter
                 testElements.Count,
                 source);
 
-            this.SendTestCases(source, testElements, discoverySink, discoveryContext, logger);
+            // we might have flushed all of them.
+            if (testElements.Any())
+            {
+                this.SendTestCases(source, testElements, discoverySink, discoveryContext, logger);
+            }
         }
 
         internal void SendTestCases(string source, IEnumerable<UnitTestElement> testElements, ITestCaseDiscoverySink discoverySink, IDiscoveryContext discoveryContext, IMessageLogger logger)

@@ -87,7 +87,6 @@
     <Compile Include="Discovery\AssemblyEnumeratorWrapperTests.cs" />
     <Compile Include="Discovery\TestMethodValidatorTests.cs" />
     <Compile Include="Discovery\TypeEnumeratorTests.cs" />
-    <Compile Include="Discovery\TypeValidatorTests.cs" />
     <Compile Include="Discovery\UnitTestDiscovererTests.cs" />
     <Compile Include="Execution\LogMessageListenerTests.cs" />
     <Compile Include="Execution\TestAssemblyInfoTests.cs" />

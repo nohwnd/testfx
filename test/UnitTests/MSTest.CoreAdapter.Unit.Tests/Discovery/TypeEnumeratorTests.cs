@@ -60,13 +60,6 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
         #region Enumerate tests
 
         [TestMethod]
-        public void EnumerateShouldReturnNullIfTypeIsNotValid()
-        {
-            TypeEnumerator typeEnumerator = this.GetTypeEnumeratorInstance(typeof(IDummyInterface), string.Empty);
-            Assert.IsNull(typeEnumerator.Enumerate(out this.warnings));
-        }
-
-        [TestMethod]
         public void EnumerateShouldReturnEmptyCollectionWhenNoValidTestMethodsExist()
         {
             this.SetupTestClassAndTestMethods(isValidTestClass: true, isValidTestMethod: false, isMethodFromSameAssembly: true);
@@ -312,23 +305,6 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
 
             Assert.IsNotNull(testElement);
             Assert.IsFalse(testElement.Ignored);
-        }
-
-        [TestMethod]
-        public void GetTestFromMethodShouldSetTestCategory()
-        {
-            this.SetupTestClassAndTestMethods(isValidTestClass: true, isValidTestMethod: true, isMethodFromSameAssembly: true);
-            TypeEnumerator typeEnumerator = this.GetTypeEnumeratorInstance(typeof(DummyTestClass), "DummyAssemblyName");
-            var methodInfo = typeof(DummyTestClass).GetMethod("MethodWithVoidReturnType");
-            var testCategories = new string[] { "foo", "bar" };
-
-            // Setup mocks
-            this.mockReflectHelper.Setup(rh => rh.GetCategories(methodInfo, typeof(DummyTestClass))).Returns(testCategories);
-
-            var testElement = typeEnumerator.GetTestFromMethod(methodInfo, true, this.warnings);
-
-            Assert.IsNotNull(testElement);
-            CollectionAssert.AreEqual(testCategories, testElement.TestCategory);
         }
 
         [TestMethod]
@@ -582,10 +558,8 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
 
         private void SetupTestClassAndTestMethods(bool isValidTestClass, bool isValidTestMethod, bool isMethodFromSameAssembly)
         {
-            this.mockTypeValidator.Setup(tv => tv.IsValidTestClass(It.IsAny<Type>(), It.IsAny<ICollection<string>>()))
-                .Returns(isValidTestClass);
             this.mockTestMethodValidator.Setup(
-                tmv => tmv.IsValidTestMethod(It.IsAny<MethodInfo>(), It.IsAny<Type>(), It.IsAny<ICollection<string>>())).Returns(isValidTestMethod);
+                tmv => tmv.IsValidTestMethod(It.IsAny<MethodInfo>(), It.IsAny<IReadOnlyCollection<Attribute>>(), It.IsAny<Type>(), It.IsAny<ICollection<string>>())).Returns(isValidTestMethod);
             this.mockReflectHelper.Setup(
                 rh => rh.IsMethodDeclaredInSameAssemblyAsType(It.IsAny<MethodInfo>(), It.IsAny<Type>())).Returns(isMethodFromSameAssembly);
         }
@@ -597,7 +571,9 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.UnitTests.Discovery
                 assemblyName,
                 this.mockReflectHelper.Object,
                 this.mockTypeValidator.Object,
-                this.mockTestMethodValidator.Object);
+                this.mockTestMethodValidator.Object,
+                new List<Attribute>(),
+                new List<Attribute>());
         }
 
         #endregion

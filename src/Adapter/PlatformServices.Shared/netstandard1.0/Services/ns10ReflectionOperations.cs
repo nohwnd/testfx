@@ -49,6 +49,26 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         {
             return assembly.GetCustomAttributes(type).ToArray<object>();
         }
+
+        public object[] GetCustomAttributes(Assembly assembly)
+        {
+            return assembly.GetCustomAttributes().ToArray<object>();
+        }
+
+        public object[] GetCustomAttributes(Type type)
+        {
+            return type.GetTypeInfo().GetCustomAttributes().ToArray<object>();
+        }
+
+        public bool IsAttributeDefined(MemberInfo memberInfo, Type attributeType, bool inherit)
+        {
+            return memberInfo.IsDefined(attributeType, inherit);
+        }
+
+        public bool IsAttributeDefined(Type type, Type attributeType, bool inherit)
+        {
+            return type.GetTypeInfo().IsDefined(attributeType, inherit);
+        }
     }
 
 #pragma warning restore SA1649 // SA1649FileNameMustMatchTypeName

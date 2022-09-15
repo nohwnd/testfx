@@ -76,21 +76,32 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
         /// Enumerates through all types in the assembly in search of valid test methods.
         /// </summary>
         /// <param name="assemblyFileName">The assembly file name.</param>
+        /// <param name="flushTests">report tests back after single type if anyone is interested in them. Returns true when tests were taken, false when the should be reported at the end.</param>
         /// <param name="warnings">Contains warnings if any, that need to be passed back to the caller.</param>
         /// <returns>A collection of Test Elements.</returns>
-        internal ICollection<UnitTestElement> EnumerateAssembly(string assemblyFileName, out ICollection<string> warnings)
+        internal ICollection<UnitTestElement> EnumerateAssembly(string assemblyFileName, Func<List<UnitTestElement>, List<string>, bool> flushTests, out ICollection<string> warnings)
         {
             Debug.Assert(!string.IsNullOrWhiteSpace(assemblyFileName), "Invalid assembly file name.");
 
             var runSettingsXml = this.RunSettingsXml;
             var warningMessages = new List<string>();
-            var tests = new List<UnitTestElement>();
+
+            // Init to 100 capacity, because we are likely to put in here more than 1 test,
+            // and the initial resizings from small size are unnecessary.
+            var tests = new List<UnitTestElement>(100);
 
             var assembly = PlatformServiceProvider.Instance.FileOperations.LoadAssembly(assemblyFileName, isReflectionOnly: false);
 
             var types = this.GetTypes(assembly, assemblyFileName, warningMessages);
-            var discoverInternals = assembly.GetCustomAttribute<UTF.DiscoverInternalsAttribute>() != null;
+            var discoverInternals = assembly.IsDefined(typeof(UTF.DiscoverInternalsAttribute));
             var testDataSourceDiscovery = assembly.GetCustomAttribute<UTF.TestDataSourceDiscoveryAttribute>()?.DiscoveryOption ?? UTF.TestDataSourceDiscoveryOption.DuringDiscovery;
+
+            IReadOnlyCollection<Attribute> assemblyAttributes = ReflectHelper.GetCustomAttributes(assembly);
+
+            var sourceLevelParameters = PlatformServiceProvider.Instance.SettingsProvider.GetProperties(assemblyFileName);
+            sourceLevelParameters = RunSettingsUtilities.GetTestRunParameters(runSettingsXml)?.ConcatWithOverwrites(sourceLevelParameters)
+                ?? sourceLevelParameters
+                ?? new Dictionary<string, object>();
 
             foreach (var type in types)
             {
@@ -99,8 +110,19 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
                     continue;
                 }
 
-                var testsInType = this.DiscoverTestsInType(assemblyFileName, runSettingsXml, assembly, type, warningMessages, discoverInternals, testDataSourceDiscovery);
-                tests.AddRange(testsInType);
+                var testsInType = this.DiscoverTestsInType(assemblyFileName, assembly, assemblyAttributes, type, sourceLevelParameters, warningMessages, discoverInternals, testDataSourceDiscovery);
+                if (testsInType != null)
+                {
+                    var warningsCopy = warningMessages.ToList();
+
+                    warningMessages.Clear();
+                    var tsts = testsInType.ToList();
+                    var flushed = false && flushTests(tsts, warningsCopy);
+                    if (!flushed)
+                    {
+                        tests.AddRange(testsInType);
+                    }
+                }
             }
 
             warnings = warningMessages;
@@ -182,54 +204,59 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
         /// <summary>
         /// Returns an instance of the <see cref="TypeEnumerator"/> class.
         /// </summary>
-        /// <param name="type">The type to enumerate.</param>
+        /// <param name="assemblyAttributes">Assembly attributes defined on this assembly.</param>
         /// <param name="assemblyFileName">The reflected assembly name.</param>
+        /// <param name="type">The type to enumerate.</param
+        /// <param name="typeAttributes">Type attributed defined on this assembly.</param>
         /// <param name="discoverInternals">True to discover test classes which are declared internal in
         /// addition to test classes which are declared public.</param>
         /// <returns>a TypeEnumerator instance.</returns>
-        internal virtual TypeEnumerator GetTypeEnumerator(Type type, string assemblyFileName, bool discoverInternals = false)
+        internal virtual TypeEnumerator GetTypeEnumerator(IReadOnlyCollection<Attribute> assemblyAttributes, string assemblyFileName, Type type, IReadOnlyCollection<Attribute> typeAttributes, bool discoverInternals)
         {
-            var typeValidator = new TypeValidator(ReflectHelper, discoverInternals);
-            var testMethodValidator = new TestMethodValidator(ReflectHelper, discoverInternals);
+            var typeValidator = new TypeValidator(type, typeAttributes, ReflectHelper, discoverInternals);
+            var testMethodValidator = new TestMethodValidator(type, typeAttributes, ReflectHelper, discoverInternals);
 
-            return new TypeEnumerator(type, assemblyFileName, ReflectHelper, typeValidator, testMethodValidator);
+            return new TypeEnumerator(type, assemblyFileName, ReflectHelper, typeValidator, testMethodValidator, assemblyAttributes, typeAttributes);
         }
 
-        private IEnumerable<UnitTestElement> DiscoverTestsInType(string assemblyFileName, string runSettingsXml, Assembly assembly, Type type, List<string> warningMessages, bool discoverInternals = false, UTF.TestDataSourceDiscoveryOption discoveryOption = UTF.TestDataSourceDiscoveryOption.DuringExecution)
+        private IEnumerable<UnitTestElement> DiscoverTestsInType(string assemblyFileName, Assembly assembly, IReadOnlyCollection<Attribute> assemblyAttributes, Type type, IDictionary<string, object> sourceLevelParameters, List<string> warningMessages, bool discoverInternals = false, UTF.TestDataSourceDiscoveryOption discoveryOption = UTF.TestDataSourceDiscoveryOption.DuringExecution)
         {
-            var sourceLevelParameters = PlatformServiceProvider.Instance.SettingsProvider.GetProperties(assemblyFileName);
-            sourceLevelParameters = RunSettingsUtilities.GetTestRunParameters(runSettingsXml)?.ConcatWithOverwrites(sourceLevelParameters)
-                ?? sourceLevelParameters
-                ?? new Dictionary<string, object>();
-
             string typeFullName = null;
-            var tests = new List<UnitTestElement>();
 
             try
             {
                 typeFullName = type.FullName;
-                var unitTestCases = this.GetTypeEnumerator(type, assemblyFileName, discoverInternals).Enumerate(out var warningsFromTypeEnumerator);
-                var typeIgnored = ReflectHelper.IsAttributeDefined(type, typeof(UTF.IgnoreAttribute), false);
 
+                IReadOnlyCollection<Attribute> typeAttributes = type.GetTypeInfo().GetCustomAttributes().ToList();
+                TypeEnumerator typeEnumerator = this.GetTypeEnumerator(assemblyAttributes, assemblyFileName, type, typeAttributes, discoverInternals);
+                var unitTestCases = typeEnumerator.Enumerate(out var warningsFromTypeEnumerator);
+
+                // TODO: is this unused?
+                // var typeIgnored = ReflectHelper.IsAttributeDefined(type.GetTypeInfo(), typeof(UTF.IgnoreAttribute), false);
                 if (warningsFromTypeEnumerator != null)
                 {
                     warningMessages.AddRange(warningsFromTypeEnumerator);
                 }
 
-                if (unitTestCases != null)
+                // Filter out dynamic data tests and move them to `tests`.
+                if (unitTestCases != null && discoveryOption == UTF.TestDataSourceDiscoveryOption.DuringDiscovery)
                 {
+                    // Create a new list that can hold as many as we have test cases or less.
+                    var tests = new List<UnitTestElement>(unitTestCases.Count);
                     foreach (var test in unitTestCases)
                     {
-                        if (discoveryOption == UTF.TestDataSourceDiscoveryOption.DuringDiscovery)
-                        {
-                            if (this.DynamicDataAttached(sourceLevelParameters, assembly, test, tests))
-                            {
-                                continue;
-                            }
-                        }
-
+                        // if (this.DynamicDataAttached(sourceLevelParameters, assembly, test, tests))
+                        // {
+                        //    continue;
+                        // }
                         tests.Add(test);
                     }
+
+                    return tests;
+                }
+                else
+                {
+                    return unitTestCases;
                 }
             }
             catch (Exception exception)
@@ -239,9 +266,9 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
                 string message = string.Format(CultureInfo.CurrentCulture, Resource.CouldNotInspectTypeDuringDiscovery, typeFullName, assemblyFileName, exception.Message);
                 PlatformServiceProvider.Instance.AdapterTraceLogger.LogInfo($"AssemblyEnumerator: {message}");
                 warningMessages.Add(message);
-            }
 
-            return tests;
+                return null;
+            }
         }
 
         private bool DynamicDataAttached(IDictionary<string, object> sourceLevelParameters, Assembly assembly, UnitTestElement test, List<UnitTestElement> tests)

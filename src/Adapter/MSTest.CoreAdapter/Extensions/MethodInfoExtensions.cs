@@ -127,7 +127,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Extensions
         /// <returns>Compiler generated type name for given async test method..</returns>
         internal static string GetAsyncTypeName(this MethodInfo method)
         {
-            var asyncStateMachineAttribute = ReflectHelper.GetCustomAttributes(method, typeof(AsyncStateMachineAttribute), false).FirstOrDefault() as AsyncStateMachineAttribute;
+            var asyncStateMachineAttribute = method.GetCustomAttribute<AsyncStateMachineAttribute>();
 
             return asyncStateMachineAttribute?.StateMachineType?.FullName;
         }

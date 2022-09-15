@@ -62,6 +62,26 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTestAdapter.PlatformServices
         {
             return this.reflectionUtility.GetCustomAttributes(assembly, type);
         }
+
+        public object[] GetCustomAttributes(Assembly assembly)
+        {
+            throw new NotImplementedException();
+        }
+
+        public object[] GetCustomAttributes(Type type)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool IsAttributeDefined(MemberInfo memberInfo, Type type, bool inherit)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool IsAttributeDefined(Type type, Type attributeType, bool inherit)
+        {
+            throw new NotImplementedException();
+        }
     }
 
 #pragma warning restore SA1649 // SA1649FileNameMustMatchTypeName

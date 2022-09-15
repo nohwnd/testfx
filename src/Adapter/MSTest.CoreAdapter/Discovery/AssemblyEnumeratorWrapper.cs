@@ -28,9 +28,10 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
         /// </summary>
         /// <param name="assemblyFileName"> The assembly file name. </param>
         /// <param name="runSettings"> The run Settings. </param>
+        /// <param name="flushTests">fffff</param>
         /// <param name="warnings"> Contains warnings if any, that need to be passed back to the caller. </param>
         /// <returns> A collection of test elements. </returns>
-        internal ICollection<UnitTestElement> GetTests(string assemblyFileName, IRunSettings runSettings, out ICollection<string> warnings)
+        internal ICollection<UnitTestElement> GetTests(string assemblyFileName, IRunSettings runSettings, Func<List<UnitTestElement>, List<string>, bool> flushTests, out ICollection<string> warnings)
         {
             warnings = new List<string>();
 
@@ -55,7 +56,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
                 }
 
                 // Load the assembly in isolation if required.
-                return this.GetTestsInIsolation(fullFilePath, runSettings, out warnings);
+                return this.GetTestsInIsolation(fullFilePath, runSettings, flushTests, out warnings);
             }
             catch (FileNotFoundException ex)
             {
@@ -101,7 +102,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
             }
         }
 
-        private ICollection<UnitTestElement> GetTestsInIsolation(string fullFilePath, IRunSettings runSettings, out ICollection<string> warnings)
+        private ICollection<UnitTestElement> GetTestsInIsolation(string fullFilePath, IRunSettings runSettings, Func<List<UnitTestElement>, List<string>, bool> flushTests, out ICollection<string> warnings)
         {
             using (var isolationHost = PlatformServiceProvider.Instance.CreateTestSourceHost(fullFilePath, runSettings, frameworkHandle: null))
             {
@@ -118,7 +119,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
                     PlatformServiceProvider.Instance.AdapterTraceLogger.LogWarning(Resource.OlderTFMVersionFound);
                 }
 
-                return assemblyEnumerator.EnumerateAssembly(fullFilePath, out warnings);
+                return assemblyEnumerator.EnumerateAssembly(fullFilePath, flushTests, out warnings);
             }
         }
     }

@@ -6,6 +6,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
     using System;
     using System.Collections.Generic;
     using System.Globalization;
+    using System.Linq;
     using System.Reflection;
 
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Extensions;
@@ -19,24 +20,23 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
     {
         private readonly ReflectHelper reflectHelper;
         private readonly bool discoverInternals;
+        private readonly Type type;
+        private readonly TypeInfo typeInfo;
+        private readonly IReadOnlyCollection<Attribute> typeAttributes;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TestMethodValidator"/> class.
         /// </summary>
-        /// <param name="reflectHelper">An instance to reflection helper for type information.</param>
-        internal TestMethodValidator(ReflectHelper reflectHelper)
-            : this(reflectHelper, false)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="TestMethodValidator"/> class.
-        /// </summary>
+        /// <param name="type">The type to enumerate.</param
+        /// <param name="typeAttributes">Type attributed defined on this assembly.</param>
         /// <param name="reflectHelper">An instance to reflection helper for type information.</param>
         /// <param name="discoverInternals">True to discover methods which are declared internal in addition to methods
         /// which are declared public.</param>
-        internal TestMethodValidator(ReflectHelper reflectHelper, bool discoverInternals)
+        internal TestMethodValidator(Type type, IReadOnlyCollection<Attribute> typeAttributes, ReflectHelper reflectHelper, bool discoverInternals)
         {
+            this.type = type;
+            this.typeInfo = type.GetTypeInfo();
+            this.typeAttributes = typeAttributes;
             this.reflectHelper = reflectHelper;
             this.discoverInternals = discoverInternals;
         }
@@ -45,13 +45,15 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
         /// Determines if a method is a valid test method.
         /// </summary>
         /// <param name="testMethodInfo"> The reflected method. </param>
+        /// <param name="methodAttributes"> Method attributes. </param>
         /// <param name="type"> The reflected type. </param>
         /// <param name="warnings"> Contains warnings if any, that need to be passed back to the caller. </param>
         /// <returns> Return true if a method is a valid test method. </returns>
-        internal virtual bool IsValidTestMethod(MethodInfo testMethodInfo, Type type, ICollection<string> warnings)
+        internal virtual bool IsValidTestMethod(MethodInfo testMethodInfo, IReadOnlyCollection<Attribute> methodAttributes, Type type, ICollection<string> warnings)
         {
-            if (!this.reflectHelper.IsAttributeDefined(testMethodInfo, typeof(TestMethodAttribute), false)
-                && !this.reflectHelper.HasAttributeDerivedFrom(testMethodInfo, typeof(TestMethodAttribute), false))
+            type = this.type;
+            if (!this.HasAttribute(methodAttributes,  typeof(TestMethodAttribute))
+                && !this.HasAttributeDerivedFrom(methodAttributes, typeof(TestMethodAttribute)))
             {
                 return false;
             }
@@ -82,6 +84,33 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
             }
 
             return true;
+        }
+
+        internal bool HasAttribute(IReadOnlyCollection<Attribute> attributes, Type attributeType)
+        {
+            foreach (var attribute in attributes)
+            {
+                if (attribute.GetType() == attributeType)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal bool HasAttributeDerivedFrom(IReadOnlyCollection<Attribute> attributes, Type attributeType)
+        {
+            var attributeTypeInfo = attributeType.GetTypeInfo();
+            foreach (var attribute in this.typeAttributes)
+            {
+                if (attributeTypeInfo.IsSubclassOf(attribute.GetType()))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

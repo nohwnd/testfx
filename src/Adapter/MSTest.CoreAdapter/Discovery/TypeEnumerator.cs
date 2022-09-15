@@ -10,10 +10,10 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
     using System.Linq;
     using System.Reflection;
     using System.Threading.Tasks;
-
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Extensions;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Helpers;
     using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.ObjectModel;
+    using Microsoft.VisualStudio.TestPlatform.ObjectModel;
     using Microsoft.VisualStudio.TestTools.UnitTesting;
 
     /// <summary>
@@ -21,11 +21,17 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
     /// </summary>
     internal class TypeEnumerator
     {
+        private static readonly string[] EmptyStringArray = new string[0];
+
         private readonly Type type;
         private readonly string assemblyName;
         private readonly TypeValidator typeValidator;
         private readonly TestMethodValidator testMethodValidator;
         private readonly ReflectHelper reflectHelper;
+        private readonly IReadOnlyCollection<Attribute> assemblyAttributes;
+        private readonly IReadOnlyCollection<Attribute> typeAttributes;
+        private readonly IReadOnlyCollection<TestCategoryBaseAttribute> assemblyCategories;
+        private readonly IReadOnlyCollection<TestCategoryBaseAttribute> typeCategories;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TypeEnumerator"/> class.
@@ -35,13 +41,19 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
         /// <param name="reflectHelper"> An instance to reflection helper for type information. </param>
         /// <param name="typeValidator"> The validator for test classes. </param>
         /// <param name="testMethodValidator"> The validator for test methods. </param>
-        internal TypeEnumerator(Type type, string assemblyName, ReflectHelper reflectHelper, TypeValidator typeValidator, TestMethodValidator testMethodValidator)
+        /// <param name="assemblyAttributes"> The attributes that are defined on the assembly that contains this type. </param>
+        /// <param name="typeAttributes"> The attributes that are defined on this type. </param>
+        internal TypeEnumerator(Type type, string assemblyName, ReflectHelper reflectHelper, TypeValidator typeValidator, TestMethodValidator testMethodValidator, IReadOnlyCollection<Attribute> assemblyAttributes, IReadOnlyCollection<Attribute> typeAttributes)
         {
             this.type = type;
             this.assemblyName = assemblyName;
             this.reflectHelper = reflectHelper;
             this.typeValidator = typeValidator;
             this.testMethodValidator = testMethodValidator;
+            this.assemblyAttributes = assemblyAttributes;
+            this.typeAttributes = typeAttributes;
+            this.typeCategories = typeAttributes.OfType<TestCategoryBaseAttribute>().ToList();
+            this.assemblyCategories = assemblyAttributes.OfType<TestCategoryBaseAttribute>().ToList();
         }
 
         /// <summary>
@@ -53,7 +65,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
         {
             warnings = new Collection<string>();
 
-            if (!this.typeValidator.IsValidTestClass(this.type, warnings))
+            if (!this.typeValidator.IsValidTestClass(warnings))
             {
                 return null;
             }
@@ -84,10 +96,13 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
                     continue;
                 }
 
-                if (this.testMethodValidator.IsValidTestMethod(method, this.type, warnings))
+                var methodAttributes = method.GetCustomAttributes().ToList();
+                if (this.testMethodValidator.IsValidTestMethod(method, methodAttributes, this.type, warnings))
                 {
                     foundDuplicateTests = foundDuplicateTests || !foundTests.Add(method.Name);
-                    tests.Add(this.GetTestFromMethod(method, isMethodDeclaredInTestTypeAssembly, warnings));
+                    var test = this.GetTestFromMethod(method, isMethodDeclaredInTestTypeAssembly, warnings);
+
+                    tests.Add(test);
                 }
             }
 
@@ -134,7 +149,7 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
 
             var testMethod = new TestMethod(method, method.Name, this.type.FullName, this.assemblyName, isAsync);
 
-            if (!method.DeclaringType.FullName.Equals(this.type.FullName))
+            if (method.DeclaringType != this.type)
             {
                 testMethod.DeclaringClassFullName = method.DeclaringType.FullName;
             }
@@ -149,65 +164,159 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery
             var testElement = new UnitTestElement(testMethod);
 
             // Get compiler generated type name for async test method (either void returning or task returning).
-            var asyncTypeName = method.GetAsyncTypeName();
+            var asyncTypeName = isAsync ? method.GetAsyncTypeName() : null;
             testElement.AsyncTypeName = asyncTypeName;
 
-            testElement.TestCategory = this.reflectHelper.GetCategories(method, this.type);
+            IReadOnlyCollection<Attribute> methodNonInheritedAttributes = method.GetCustomAttributes().ToList();
+            IReadOnlyCollection<Attribute> methodInheritedAttributes = method.GetCustomAttributes(true).ToList();
+            testElement.TestCategory = this.GetCategories(methodNonInheritedAttributes);
 
-            testElement.DoNotParallelize = this.reflectHelper.IsDoNotParallelizeSet(method, this.type);
+            testElement.DoNotParallelize = this.HasAttribute(methodNonInheritedAttributes, typeof(DoNotParallelizeAttribute)) || this.HasAttribute(this.typeAttributes, typeof(DoNotParallelizeAttribute));
 
-            var traits = this.reflectHelper.GetTestPropertiesAsTraits(method);
+            List<Trait> traits = this.GetTestPropertiesAsTraits(methodInheritedAttributes);
 
-            var ownerTrait = this.reflectHelper.GetTestOwnerAsTraits(method);
+            var ownerTrait = this.GetTestOwnerAsTraits(methodInheritedAttributes);
             if (ownerTrait != null)
             {
-                traits = traits.Concat(new[] { ownerTrait });
+                traits.Add(ownerTrait);
             }
 
-            testElement.Priority = this.reflectHelper.GetPriority(method);
+            testElement.Priority = this.GetSingleAttributeOrNull<PriorityAttribute>(methodInheritedAttributes)?.Priority;
 
+            // this method just converts int? to trait object, it is okay how it is implemented in reflect helper
             var priorityTrait = this.reflectHelper.GetTestPriorityAsTraits(testElement.Priority);
             if (priorityTrait != null)
             {
-                traits = traits.Concat(new[] { priorityTrait });
+                traits.Add(priorityTrait);
             }
 
             testElement.Traits = traits.ToArray();
 
-            var cssIteration = this.reflectHelper.GetCustomAttribute(method, typeof(CssIterationAttribute)) as CssIterationAttribute;
-            if (cssIteration != null)
-            {
-                testElement.CssIteration = cssIteration.CssIteration;
-            }
+            testElement.CssIteration = this.GetSingleAttributeOrNull<CssIterationAttribute>(methodInheritedAttributes)?.CssIteration;
+            testElement.CssProjectStructure = this.GetSingleAttributeOrNull<CssProjectStructureAttribute>(methodInheritedAttributes)?.CssProjectStructure;
+            testElement.Description = this.GetSingleAttributeOrNull<DescriptionAttribute>(methodInheritedAttributes)?.Description;
 
-            var cssProjectStructure = this.reflectHelper.GetCustomAttribute(method, typeof(CssProjectStructureAttribute)) as CssProjectStructureAttribute;
-            if (cssProjectStructure != null)
-            {
-                testElement.CssProjectStructure = cssProjectStructure.CssProjectStructure;
-            }
+            testElement.WorkItemIds = methodInheritedAttributes.OfType<WorkItemAttribute>().Select(a => a.Id.ToString()).ToArray();
 
-            var descriptionAttribute = this.reflectHelper.GetCustomAttribute(method, typeof(DescriptionAttribute)) as DescriptionAttribute;
-            if (descriptionAttribute != null)
-            {
-                testElement.Description = descriptionAttribute.Description;
-            }
-
-            var workItemAttributes = this.reflectHelper.GetCustomAttributes(method, typeof(WorkItemAttribute)).Cast<WorkItemAttribute>().ToArray();
-            if (workItemAttributes.Any())
-            {
-                testElement.WorkItemIds = workItemAttributes.Select(x => x.Id.ToString()).ToArray();
-            }
-
-            testElement.Ignored = this.reflectHelper.IsAttributeDefined(method, typeof(IgnoreAttribute), false);
+            testElement.Ignored = method.IsDefined(typeof(IgnoreAttribute), false);
 
             // Get Deployment items if any.
             testElement.DeploymentItems = PlatformServiceProvider.Instance.TestDeployment.GetDeploymentItems(method, this.type, warnings);
 
             // get DisplayName from TestMethodAttribute
-            var testMethodAttribute = this.reflectHelper.GetCustomAttribute(method, typeof(TestMethodAttribute)) as TestMethodAttribute;
-            testElement.DisplayName = testMethodAttribute?.DisplayName ?? method.Name;
+            var displayName = this.GetSingleAttributeOrNull<TestMethodAttribute>(methodInheritedAttributes)?.DisplayName;
+            testElement.DisplayName = displayName ?? method.Name;
 
             return testElement;
+        }
+
+        private T GetSingleAttributeOrNull<T>(IReadOnlyCollection<Attribute> methodInheritedAttributes)
+            where T : Attribute
+        {
+            // Optimized to search only for first 2, and then return.
+            T found = null;
+            foreach (var attribute in methodInheritedAttributes)
+            {
+                if (attribute is T a)
+                {
+                    if (found != null)
+                    {
+                        // we found second one, and we want to return null when there are more than 1;
+                        return null;
+                    }
+
+                    // we found the first one, save it
+                    found = a;
+                }
+            }
+
+            // Either the first one or null.
+            return found;
+        }
+
+        private int? GetPriority(IReadOnlyCollection<Attribute> methodInheritedAttributes)
+        {
+            var priorityAttributes = methodInheritedAttributes.OfType<PriorityAttribute>().ToList();
+
+            if (priorityAttributes.Count != 1)
+            {
+                return null;
+            }
+
+            return priorityAttributes[0].Priority;
+        }
+
+        private Trait GetTestOwnerAsTraits(IReadOnlyCollection<Attribute> methodInheritedAttributes)
+        {
+            var ownerAttributes = methodInheritedAttributes.OfType<OwnerAttribute>().ToList();
+            if (ownerAttributes.Count != 1)
+            {
+                return null;
+            }
+
+            string owner = ownerAttributes[0].Owner;
+            return new Trait("Owner", owner);
+        }
+
+        private List<Trait> GetTestPropertiesAsTraits(IReadOnlyCollection<Attribute> methodInheritedAttributes)
+        {
+            var testPropertyAttributes = methodInheritedAttributes.OfType<TestPropertyAttribute>().ToList();
+            var properties = new List<Trait>(testPropertyAttributes.Count);
+
+            foreach (TestPropertyAttribute testProperty in testPropertyAttributes)
+            {
+                if (testProperty.Name == null)
+                {
+                    properties.Add(new Trait(string.Empty, testProperty.Value));
+                }
+                else
+                {
+                    properties.Add(new Trait(testProperty.Name, testProperty.Value));
+                }
+            }
+
+            return properties;
+        }
+
+        private bool HasAttribute(IReadOnlyCollection<Attribute> attributeCollection, Type type)
+        {
+            foreach (var attribute in attributeCollection)
+            {
+                if (attribute.GetType() == type)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private string[] GetCategories(IReadOnlyCollection<Attribute> methodAttributes)
+        {
+            var methodCategories = methodAttributes.OfType<TestCategoryBaseAttribute>().ToList();
+            if (methodCategories.Count == 0 && this.typeCategories.Count == 0 && this.assemblyCategories.Count == 0)
+            {
+                return EmptyStringArray;
+            }
+
+            var categories = new List<string>(methodCategories.Count + this.typeCategories.Count + this.assemblyCategories.Count);
+
+            foreach (TestCategoryBaseAttribute category in methodCategories)
+            {
+                categories.AddRange(category.TestCategories);
+            }
+
+            foreach (TestCategoryBaseAttribute category in this.typeCategories)
+            {
+                categories.AddRange(category.TestCategories);
+            }
+
+            foreach (TestCategoryBaseAttribute category in this.assemblyCategories)
+            {
+                categories.AddRange(category.TestCategories);
+            }
+
+            return categories.ToArray();
         }
     }
 }
