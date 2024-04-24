@@ -173,11 +173,11 @@ internal class UnitTestElement
             testCase.SetPropertyValue(Constants.PriorityProperty, Priority.Value);
         }
 
-        if (Traits != null)
-        {
-            testCase.Traits.AddRange(Traits);
-        }
-
+        // this is super slow
+        // if (Traits != null)
+        // {
+        //    testCase.Traits.AddRange(Traits);
+        // }
         if (!StringEx.IsNullOrEmpty(CssIteration))
         {
             testCase.SetPropertyValue(Constants.CssIterationProperty, CssIteration);
@@ -226,6 +226,12 @@ internal class UnitTestElement
 
     private void SetTestCaseId(TestCase testCase, string testFullName)
     {
+        var a = true;
+        if (a)
+        {
+            return;
+        }
+
         testCase.SetPropertyValue(Constants.TestIdGenerationStrategyProperty, (int)TestMethod.TestIdGenerationStrategy);
 
         switch (TestMethod.TestIdGenerationStrategy)

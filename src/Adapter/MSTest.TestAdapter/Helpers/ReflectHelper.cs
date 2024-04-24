@@ -100,6 +100,11 @@ internal class ReflectHelper : MarshalByRefObject
         where TAttribute : Attribute
         => HasAttributeDerivedFrom<TAttribute>((MemberInfo)typeInfo, inherit);
 
+    public IReadOnlyCollection<Attribute> GetCustomAttributes(Assembly assembly)
+    {
+        return assembly.GetCustomAttributes().ToList();
+    }
+
     /// <summary>
     /// Returns true when specified class/member has attribute derived from specific attribute.
     /// </summary>
@@ -310,18 +315,7 @@ internal class ReflectHelper : MarshalByRefObject
     /// <returns>Categories defined.</returns>
     internal virtual string[] GetCategories(MemberInfo categoryAttributeProvider, Type owningType)
     {
-        var categories = GetCustomAttributesRecursively(categoryAttributeProvider, owningType);
-        List<string> testCategories = [];
-
-        if (categories != null)
-        {
-            foreach (TestCategoryBaseAttribute category in categories.Cast<TestCategoryBaseAttribute>())
-            {
-                testCategories.AddRange(category.TestCategories);
-            }
-        }
-
-        return testCategories.ToArray();
+        throw new NotImplementedException();
     }
 
     /// <summary>
@@ -371,18 +365,7 @@ internal class ReflectHelper : MarshalByRefObject
     /// <returns>The categories of the specified type on the method. </returns>
     internal IEnumerable<object> GetCustomAttributesRecursively(MemberInfo attributeProvider, Type owningType)
     {
-        var categories = GetCustomAttributes<TestCategoryBaseAttribute>(attributeProvider);
-        if (categories != null)
-        {
-            categories = categories.Concat(GetCustomAttributes<TestCategoryBaseAttribute>(owningType.GetTypeInfo())).ToArray();
-        }
-
-        if (categories != null)
-        {
-            categories = categories.Concat(GetCustomAttributeForAssembly<TestCategoryBaseAttribute>(owningType.GetTypeInfo())).ToArray();
-        }
-
-        return categories ?? Enumerable.Empty<object>();
+        throw new NotImplementedException();
     }
 
     /// <summary>

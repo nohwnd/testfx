@@ -87,7 +87,7 @@ internal sealed class ListTestsMessageBus(
                 _printTitle = false;
             }
 
-            await _outputDisplay.DisplayAsync(this, new TextOutputDeviceData(testNodeUpdatedMessage.TestNode.DisplayName));
+            // await _outputDisplay.DisplayAsync(this, new TextOutputDeviceData(testNodeUpdatedMessage.TestNode.DisplayName));
         }
     }
 }

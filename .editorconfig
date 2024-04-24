@@ -7,6 +7,22 @@ root = true
 # All files
 [*]
 indent_style = space
+csharp_indent_labels = one_less_than_current
+csharp_using_directive_placement = outside_namespace:silent
+csharp_prefer_simple_using_statement = true:suggestion
+csharp_prefer_braces = true:silent
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_style_prefer_method_group_conversion = true:silent
+csharp_style_prefer_top_level_statements = true:silent
+csharp_style_prefer_primary_constructors = false:suggestion
+csharp_style_expression_bodied_methods = false:silent
+csharp_style_expression_bodied_constructors = false:silent
+csharp_style_expression_bodied_operators = false:silent
+csharp_style_expression_bodied_properties = true:silent
+csharp_style_expression_bodied_indexers = true:silent
+csharp_style_expression_bodied_accessors = true:silent
+csharp_style_expression_bodied_lambdas = true:silent
+csharp_style_expression_bodied_local_functions = false:silent
 
 # Shell scripts
 [*.sh]
@@ -164,7 +180,7 @@ dotnet_diagnostic.IDE0028.severity = warning
 
 # IDE0031: Use null propagation
 dotnet_diagnostic.IDE0031.severity = warning
-dotnet_style_null_propagation = true
+dotnet_style_null_propagation = true:suggestion
 
 # IDE0032: Use auto-implemented property
 dotnet_diagnostic.IDE0032.severity = warning
@@ -295,7 +311,7 @@ dotnet_diagnostic.IDE0280.severity = warning
 dotnet_diagnostic.IDE0270.severity = warning
 
 # IDE0300: Simplify collection initialization
-dotnet_style_prefer_collection_expression = false
+dotnet_style_prefer_collection_expression = never:suggestion
 
 # IDE0290: Use primary constructor
 csharp_style_prefer_primary_constructors = false
@@ -476,3 +492,4 @@ dotnet_naming_style.s_underscore_camel_case.required_prefix = s_
 dotnet_naming_style.s_underscore_camel_case.required_suffix =
 dotnet_naming_style.s_underscore_camel_case.word_separator =
 dotnet_naming_style.s_underscore_camel_case.capitalization = camel_case
+end_of_line = crlf

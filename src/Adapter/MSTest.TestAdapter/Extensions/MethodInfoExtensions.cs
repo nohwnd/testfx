@@ -116,7 +116,7 @@ internal static class MethodInfoExtensions
 #if NETCOREAPP
             || ReflectHelper.MatchReturnType(method, typeof(ValueTask))
 #endif
-            || (ReflectHelper.MatchReturnType(method, typeof(void)) && method.GetAsyncTypeName() == null);
+            || (ReflectHelper.MatchReturnType(method, typeof(void)) && !method.IsDefined(typeof(AsyncStateMachineAttribute)));
     }
 
     /// <summary>
@@ -127,7 +127,8 @@ internal static class MethodInfoExtensions
     /// <returns>Compiler generated type name for given async test method..</returns>
     internal static string? GetAsyncTypeName(this MethodInfo method)
     {
-        var asyncStateMachineAttribute = ReflectHelper.GetCustomAttributes<AsyncStateMachineAttribute>(method, false).FirstOrDefault();
+        // TODO: we know the attributes, pass them?
+        var asyncStateMachineAttribute = method.GetCustomAttribute<AsyncStateMachineAttribute>();
 
         return asyncStateMachineAttribute?.StateMachineType?.FullName;
     }

@@ -15,7 +15,6 @@ namespace Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery;
 /// </summary>
 internal class TestMethodValidator
 {
-    private readonly ReflectHelper _reflectHelper;
     private readonly bool _discoverInternals;
 
     /// <summary>
@@ -35,7 +34,6 @@ internal class TestMethodValidator
     /// which are declared public.</param>
     internal TestMethodValidator(ReflectHelper reflectHelper, bool discoverInternals)
     {
-        _reflectHelper = reflectHelper;
         _discoverInternals = discoverInternals;
     }
 
@@ -46,10 +44,10 @@ internal class TestMethodValidator
     /// <param name="type"> The reflected type. </param>
     /// <param name="warnings"> Contains warnings if any, that need to be passed back to the caller. </param>
     /// <returns> Return true if a method is a valid test method. </returns>
-    internal virtual bool IsValidTestMethod(MethodInfo testMethodInfo, Type type, ICollection<string> warnings)
+    internal virtual bool IsValidTestMethod(MethodInfo testMethodInfo, IReadOnlyCollection<Attribute> methodAttributes, Type type, ICollection<string> warnings)
     {
-        if (!_reflectHelper.IsAttributeDefined<TestMethodAttribute>(testMethodInfo, false)
-            && !_reflectHelper.HasAttributeDerivedFrom<TestMethodAttribute>(testMethodInfo, false))
+        if (!HasAttribute(methodAttributes, typeof(TestMethodAttribute))
+            && !HasAttributeDerivedFrom(methodAttributes, typeof(TestMethodAttribute)))
         {
             return false;
         }
@@ -80,5 +78,31 @@ internal class TestMethodValidator
         }
 
         return true;
+    }
+
+    internal bool HasAttribute(IReadOnlyCollection<Attribute> attributes, Type attributeType)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.GetType() == attributeType)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal bool HasAttributeDerivedFrom(IReadOnlyCollection<Attribute> attributes, Type attributeType)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attributeType.IsSubclassOf(attribute.GetType()))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

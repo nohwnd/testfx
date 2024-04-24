@@ -14,8 +14,7 @@
 
   <ItemGroup>
     <!-- This is not a test project despite it references Microsoft.Testing.Internal.Framework -->
-    <ProjectCapability Remove="TestContainer" />
-    <ProjectCapability Remove="TestingPlatformServer" />
+    <ProjectCapability Remove="TestContainer" />    <ProjectCapability Remove="TestingPlatformServer" />
   </ItemGroup>
 
 </Project>

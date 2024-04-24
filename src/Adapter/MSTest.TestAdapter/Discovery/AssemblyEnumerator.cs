@@ -86,19 +86,24 @@ internal class AssemblyEnumerator : MarshalByRefObject
         var assembly = PlatformServiceProvider.Instance.FileOperations.LoadAssembly(assemblyFileName, isReflectionOnly: false);
 
         var types = GetTypes(assembly, assemblyFileName, warningMessages);
-        var discoverInternals = assembly.GetCustomAttribute<DiscoverInternalsAttribute>() != null;
+        IReadOnlyCollection<Attribute> assemblyAttributes = ReflectHelper.GetCustomAttributes(assembly);
+
+        var discoverInternals = assembly.IsDefined(typeof(DiscoverInternalsAttribute));
         var testIdGenerationStrategy = assembly.GetCustomAttribute<TestIdGenerationStrategyAttribute>()?.Strategy
             ?? TestIdGenerationStrategy.FullyQualified;
 
         var testDataSourceDiscovery = assembly.GetCustomAttribute<TestDataSourceDiscoveryAttribute>()?.DiscoveryOption
-#pragma warning disable CS0618 // Type or member is obsolete
 
+#pragma warning disable CS0618 // Type or member is obsolete
             // When using legacy strategy, there is no point in trying to "read" data during discovery
             // as the ID generator will ignore it.
             ?? (testIdGenerationStrategy == TestIdGenerationStrategy.Legacy
                 ? TestDataSourceDiscoveryOption.DuringExecution
                 : TestDataSourceDiscoveryOption.DuringDiscovery);
 #pragma warning restore CS0618 // Type or member is obsolete
+
+        
+
         foreach (var type in types)
         {
             if (type == null)
@@ -106,7 +111,7 @@ internal class AssemblyEnumerator : MarshalByRefObject
                 continue;
             }
 
-            var testsInType = DiscoverTestsInType(assemblyFileName, RunSettingsXml, type, warningMessages, discoverInternals,
+            var testsInType = DiscoverTestsInType(assemblyFileName, assembly, assemblyAttributes,  RunSettingsXml, type, warningMessages, discoverInternals,
                 testDataSourceDiscovery, testIdGenerationStrategy);
             tests.AddRange(testsInType);
         }
@@ -196,15 +201,15 @@ internal class AssemblyEnumerator : MarshalByRefObject
     /// addition to test classes which are declared public.</param>
     /// <param name="testIdGenerationStrategy"><see cref="TestIdGenerationStrategy"/> to use when generating TestId.</param>
     /// <returns>a TypeEnumerator instance.</returns>
-    internal virtual TypeEnumerator GetTypeEnumerator(Type type, string assemblyFileName, bool discoverInternals, TestIdGenerationStrategy testIdGenerationStrategy)
+    internal virtual TypeEnumerator GetTypeEnumerator(IReadOnlyCollection<Attribute> assemblyAttributes, string assemblyFileName, Type type, IReadOnlyCollection<Attribute> typeAttributes,  bool discoverInternals, TestIdGenerationStrategy testIdGenerationStrategy)
     {
-        var typeValidator = new TypeValidator(ReflectHelper, discoverInternals);
+        var typeValidator = new TypeValidator(type, typeAttributes, ReflectHelper, discoverInternals);
         var testMethodValidator = new TestMethodValidator(ReflectHelper, discoverInternals);
 
-        return new TypeEnumerator(type, assemblyFileName, ReflectHelper, typeValidator, testMethodValidator, testIdGenerationStrategy);
+        return new TypeEnumerator(type, assemblyFileName, ReflectHelper, typeValidator, testMethodValidator, testIdGenerationStrategy, assemblyAttributes, typeAttributes);
     }
 
-    private List<UnitTestElement> DiscoverTestsInType(string assemblyFileName, string? runSettingsXml, Type type,
+    private List<UnitTestElement> DiscoverTestsInType(string assemblyFileName, Assembly assembly, IReadOnlyCollection<Attribute> assemblyAttributes, string? runSettingsXml, Type type,
         List<string> warningMessages, bool discoverInternals, TestDataSourceDiscoveryOption discoveryOption,
         TestIdGenerationStrategy testIdGenerationStrategy)
     {
@@ -220,7 +225,8 @@ internal class AssemblyEnumerator : MarshalByRefObject
         try
         {
             typeFullName = type.FullName;
-            var testTypeEnumerator = GetTypeEnumerator(type, assemblyFileName, discoverInternals, testIdGenerationStrategy);
+            IReadOnlyCollection<Attribute> typeAttributes = type.GetTypeInfo().GetCustomAttributes().ToList();
+            var testTypeEnumerator = GetTypeEnumerator(assemblyAttributes, assemblyFileName, type, typeAttributes, discoverInternals, testIdGenerationStrategy);
             var unitTestCases = testTypeEnumerator.Enumerate(out var warningsFromTypeEnumerator);
             var typeIgnored = ReflectHelper.IsAttributeDefined<IgnoreAttribute>(type, false);
 

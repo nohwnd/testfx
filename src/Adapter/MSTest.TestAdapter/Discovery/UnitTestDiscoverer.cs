@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Diagnostics;
 using System.Globalization;
 
 using Microsoft.VisualStudio.TestPlatform.MSTest.TestAdapter.Discovery;
@@ -58,7 +59,10 @@ internal class UnitTestDiscoverer
         ITestCaseDiscoverySink discoverySink,
         IDiscoveryContext? discoveryContext)
     {
+        TimeSpan getTests;
+        var sw = Stopwatch.StartNew();
         var testElements = _assemblyEnumeratorWrapper.GetTests(source, discoveryContext?.RunSettings, out var warnings);
+        getTests = sw.Elapsed;
 
         var treatDiscoveryWarningsAsErrors = MSTestSettings.CurrentSettings.TreatDiscoveryWarningsAsErrors;
 
@@ -85,6 +89,11 @@ internal class UnitTestDiscoverer
             source);
 
         SendTestCases(source, testElements, discoverySink, discoveryContext, logger);
+
+        var sendOverhead = sw.Elapsed;
+
+        Debug.WriteLine(">>>>>>>>>>>>>>>>>>>>>>>>>>>");
+        Console.WriteLine($"discovered: {testElements.Count} tests in {getTests.TotalMilliseconds} ms, sent them in {sendOverhead.TotalMilliseconds} ms");
     }
 
     internal void SendTestCases(string source, IEnumerable<UnitTestElement> testElements, ITestCaseDiscoverySink discoverySink, IDiscoveryContext? discoveryContext, IMessageLogger logger)

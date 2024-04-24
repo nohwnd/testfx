@@ -71,13 +71,13 @@ public sealed class TestMethod : ITestMethod
             throw new ArgumentNullException(nameof(method));
         }
 
-        ManagedNameHelper.GetManagedName(method, out string managedType, out string managedMethod, out var hierarchyValues);
-        hierarchyValues[HierarchyConstants.Levels.ContainerIndex] = null; // This one will be set by test windows to current test project name.
+        // ManagedNameHelper.GetManagedName(method, out string managedType, out string managedMethod, out var hierarchyValues);
+        // hierarchyValues[HierarchyConstants.Levels.ContainerIndex] = null; // This one will be set by test windows to current test project name.
 
-        ManagedTypeName = managedType;
-        ManagedMethodName = managedMethod;
+        // ManagedTypeName = managedType;
+        // ManagedMethodName = managedMethod;
         TestIdGenerationStrategy = testIdGenerationStrategy;
-        _hierarchy = new ReadOnlyCollection<string?>(hierarchyValues);
+        // _hierarchy = new ReadOnlyCollection<string?>(hierarchyValues);
     }
 
     internal TestMethod(string? managedTypeName, string? managedMethodName, string[] hierarchyValues, string name,
