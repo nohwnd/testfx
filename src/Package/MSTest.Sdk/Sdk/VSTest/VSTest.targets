@@ -8,19 +8,16 @@
     <PackageReference Include="MSTest.Analyzers" Version="$(MSTestVersion)" IsImplicitlyDefined="True" Condition=" '$(EnableMSTestAnalyzers)' != 'false' " Sdk="MSTest" />
   </ItemGroup>
 
-  <ItemGroup Condition=" '$(EnablePlaywright)' == 'true' ">
-    <PackageReference Include="Microsoft.Playwright.MSTest" Version="$(MicrosoftPlaywrightVersion)" IsImplicitlyDefined="True" Sdk="MSTest" />
-    <PackageReference Include="MSTest.Analyzers" Version="$(MSTestVersion)" IsImplicitlyDefined="True" Condition=" '$(EnableMSTestAnalyzers)' != 'false' " Sdk="MSTest" />
-  </ItemGroup>
-
   <!--
     Implicit imports
     Ensure feature is available and user hasn't opted-out from it.
     See https://github.com/dotnet/sdk/blob/f9fdf2c7d94bc86dc443e5a9ffecbd1962b1d85d/src/Tasks/Microsoft.NET.Build.Tasks/targets/Microsoft.NET.Sdk.CSharp.props#L26-L34
     -->
-  <ItemGroup Condition="'$(ImplicitUsings)' == 'true' Or '$(ImplicitUsings)' == 'enable'">
+  <ItemGroup Condition=" '$(ImplicitUsings)' == 'true' Or '$(ImplicitUsings)' == 'enable' ">
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
-    <Using Include="Microsoft.Playwright.MSTest" Condition=" '$(EnablePlaywright)' == 'true' " />
   </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)../Features/Aspire.targets" Condition=" '$(EnableAspire)' == 'true' " />
+  <Import Project="$(MSBuildThisFileDirectory)../Features/Playwright.targets" Condition=" '$(EnablePlaywright)' == 'true' " />
 
 </Project>
