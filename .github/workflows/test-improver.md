@@ -262,6 +262,8 @@ Always do Task 7 (Update Monthly Activity Summary Issue) every run. In all comme
 4. Do **not** add your own AI attribution header or footer — the safe-outputs system appends it automatically.
 5. Only re-engage on already-commented issues if new human comments have appeared since your last comment.
 6. **Maximum 3 comments per run.** Update memory.
+7. Never update or close ordinary repository issues. The `update_issue` safe output is reserved for issues whose titles start with `[test-improver]`, such as the Monthly Activity Summary.
+8. When an ordinary issue appears complete, post at most one comment recommending that maintainers close it. Do not edit or close the issue yourself.
 
 ### Task 6: Invest in Test Infrastructure
 
