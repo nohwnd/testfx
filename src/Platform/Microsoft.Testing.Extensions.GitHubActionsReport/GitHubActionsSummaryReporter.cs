@@ -31,6 +31,7 @@ internal sealed class GitHubActionsSummaryReporter :
 {
     private const string StepSummaryEnvironmentVariable = "GITHUB_STEP_SUMMARY";
     private const int MaxFailures = 20;
+    private const int MaxFailureDiagnosticCharacters = 64 * 1024;
     private const int MaxSlowestTests = 10;
 
     // GITHUB_STEP_SUMMARY is a single shared file that every test-host process appends to. Under a
@@ -148,10 +149,39 @@ internal sealed class GitHubActionsSummaryReporter :
             }
 
             TimeSpan duration = timing?.GlobalTiming.Duration ?? TimeSpan.Zero;
+            (string? Explanation, Exception? Exception) failure = state switch
+            {
+                FailedTestNodeStateProperty failed => (failed.Explanation, failed.Exception),
+                ErrorTestNodeStateProperty error => (error.Explanation, error.Exception),
+                TimeoutTestNodeStateProperty timeout => (timeout.Explanation, timeout.Exception),
+#pragma warning disable CS0618, MTP0001
+                CancelledTestNodeStateProperty cancelled => (cancelled.Explanation, cancelled.Exception),
+#pragma warning restore CS0618, MTP0001
+                _ => (null, null),
+            };
+            GitHubActionsSourceLocation? location = kind == TerminalKind.Failed
+                ? GitHubActionsSourceLocationResolver.Resolve(
+                    update.TestNode,
+                    failure.Exception,
+                    GitHubActionsRepositoryRoot.Resolve(_environment),
+                    _fileSystem,
+                    _logger,
+                    StackTraceSourceLocationResolver.SkipAssertionFramesForCurrentRuntime)
+                : null;
 
             lock (_stateLock)
             {
-                _records[uid] = new TestRecord(displayName, fullyQualifiedName, kind, duration);
+                _records[uid] = new TestRecord(
+                    displayName,
+                    fullyQualifiedName,
+                    kind,
+                    duration,
+                    failure.Explanation,
+                    failure.Exception?.Message,
+                    failure.Exception?.GetType().FullName,
+                    failure.Exception?.StackTrace,
+                    location?.RelativeNormalizedPath,
+                    location?.LineNumber ?? 0);
             }
         }
         catch (OperationCanceledException)
@@ -503,12 +533,23 @@ internal sealed class GitHubActionsSummaryReporter :
         if (failures.Count > 0)
         {
             builder.Append("### ❌ Failures (").Append(failed.ToString(CultureInfo.InvariantCulture)).Append(")\n\n");
+            int remainingDiagnosticCharacters = MaxFailureDiagnosticCharacters;
             foreach (TestRecord failure in failures)
             {
-                builder.Append("- `").Append(EscapeInlineCode(failure.FullyQualifiedName)).Append("`\n");
+                AppendFailureMarkdown(
+                    builder,
+                    failure.FullyQualifiedName,
+                    failure.Duration,
+                    failure.Explanation,
+                    failure.ExceptionMessage,
+                    failure.ExceptionType,
+                    failure.StackTrace,
+                    failure.SourceFilePath,
+                    failure.SourceLineNumber,
+                    ref remainingDiagnosticCharacters);
             }
 
-            builder.Append('\n');
+            AppendOmittedFailures(builder, failed - failures.Count);
         }
 
         IEnumerable<TestRecord> slowest = records
@@ -549,6 +590,7 @@ internal sealed class GitHubActionsSummaryReporter :
         string duration = aggregate.Duration is { } value ? FormatDuration(value) : "Unavailable";
 
         var builder = new StringBuilder();
+        int remainingDiagnosticCharacters = MaxFailureDiagnosticCharacters;
         builder.Append("## ").Append(statusIcon).Append(" Overall Test Run Summary\n\n");
         builder.Append("| Total | Passed | Failed | Skipped | Duration |\n");
         builder.Append("|---:|---:|---:|---:|---:|\n");
@@ -593,14 +635,14 @@ internal sealed class GitHubActionsSummaryReporter :
             }
 
             builder.Append(")</summary>\n\n");
-            AppendModuleMarkdown(builder, module, headingLevel: 3);
+            AppendModuleMarkdown(builder, module, headingLevel: 3, ref remainingDiagnosticCharacters);
             builder.Append("</details>\n\n");
         }
 
         return builder.ToString();
     }
 
-    private static void AppendModuleMarkdown(StringBuilder builder, CiRunSummaryModule module, int headingLevel)
+    private static void AppendModuleMarkdown(StringBuilder builder, CiRunSummaryModule module, int headingLevel, ref int remainingDiagnosticCharacters)
     {
         string heading = new('#', headingLevel);
         bool runFailed = module.FailedTests > 0 || GitHubActionsExitCode.IndicatesFailure(module.ExitCode);
@@ -625,10 +667,20 @@ internal sealed class GitHubActionsSummaryReporter :
             builder.Append(heading).Append("# ❌ Failures (").Append(module.FailedTests.ToString(CultureInfo.InvariantCulture)).Append(")\n\n");
             foreach (CiRunSummaryTest failure in module.Failures)
             {
-                builder.Append("- `").Append(EscapeInlineCode(failure.FullyQualifiedName)).Append("`\n");
+                AppendFailureMarkdown(
+                    builder,
+                    failure.FullyQualifiedName,
+                    TimeSpan.FromTicks(failure.DurationTicks),
+                    failure.Explanation,
+                    failure.ExceptionMessage,
+                    failure.ExceptionType,
+                    failure.StackTrace,
+                    failure.SourceFilePath,
+                    failure.SourceLineNumber,
+                    ref remainingDiagnosticCharacters);
             }
 
-            builder.Append('\n');
+            AppendOmittedFailures(builder, module.FailedTests - module.Failures.Length);
         }
 
         if (module.SlowestTests.Length > 0)
@@ -652,6 +704,135 @@ internal sealed class GitHubActionsSummaryReporter :
 
     private static string HtmlEncode(string value)
         => System.Net.WebUtility.HtmlEncode(value);
+
+    private static void AppendFailureMarkdown(
+        StringBuilder builder,
+        string fullyQualifiedName,
+        TimeSpan duration,
+        string? explanation,
+        string? exceptionMessage,
+        string? exceptionType,
+        string? stackTrace,
+        string? sourceFilePath,
+        int sourceLineNumber,
+        ref int remainingDiagnosticCharacters)
+    {
+        builder.Append("<details>\n<summary><code>")
+            .Append(HtmlEncode(fullyQualifiedName))
+            .Append("</code> — ")
+            .Append(HtmlEncode(FormatDuration(duration)))
+            .Append("</summary>\n\n");
+
+        bool truncated = false;
+        AppendDiagnosticLine(builder, "Exception", exceptionType, ref remainingDiagnosticCharacters, ref truncated);
+        string? location = sourceFilePath is null
+            ? null
+            : sourceLineNumber > 0
+                ? $"{sourceFilePath}:{sourceLineNumber.ToString(CultureInfo.InvariantCulture)}"
+                : sourceFilePath;
+        AppendDiagnosticLine(builder, "Location", location, ref remainingDiagnosticCharacters, ref truncated);
+
+        string? message = explanation ?? exceptionMessage;
+        AppendDiagnosticCodeBlock(builder, "Message", message, ref remainingDiagnosticCharacters, ref truncated);
+        AppendDiagnosticCodeBlock(builder, "Stack trace", stackTrace, ref remainingDiagnosticCharacters, ref truncated);
+
+        if (truncated)
+        {
+            builder.Append("_Failure diagnostics were truncated to fit the 64 KiB summary budget._\n\n");
+        }
+
+        builder.Append("</details>\n\n");
+    }
+
+    private static void AppendDiagnosticLine(
+        StringBuilder builder,
+        string label,
+        string? value,
+        ref int remainingDiagnosticCharacters,
+        ref bool truncated)
+    {
+        string? bounded = TakeDiagnosticText(value, ref remainingDiagnosticCharacters, ref truncated);
+        if (bounded is not null)
+        {
+            builder.Append("**").Append(label).Append(":** `").Append(EscapeInlineCode(bounded)).Append("`  \n");
+        }
+    }
+
+    private static void AppendDiagnosticCodeBlock(
+        StringBuilder builder,
+        string label,
+        string? value,
+        ref int remainingDiagnosticCharacters,
+        ref bool truncated)
+    {
+        string? bounded = TakeDiagnosticText(value, ref remainingDiagnosticCharacters, ref truncated);
+        if (bounded is null)
+        {
+            return;
+        }
+
+        int longestFence = GetLongestBacktickRun(bounded);
+        string fence = new('`', Math.Max(3, longestFence + 1));
+        builder.Append("**").Append(label).Append(":**\n\n")
+            .Append(fence).Append("text\n")
+            .Append(bounded);
+        if (!bounded.EndsWith("\n", StringComparison.Ordinal))
+        {
+            builder.Append('\n');
+        }
+
+        builder.Append(fence).Append("\n\n");
+    }
+
+    private static string? TakeDiagnosticText(string? value, ref int remainingDiagnosticCharacters, ref bool truncated)
+    {
+        if (RoslynString.IsNullOrEmpty(value))
+        {
+            return null;
+        }
+
+        if (remainingDiagnosticCharacters <= 0)
+        {
+            truncated = true;
+            return null;
+        }
+
+        if (value!.Length <= remainingDiagnosticCharacters)
+        {
+            remainingDiagnosticCharacters -= value.Length;
+            return value;
+        }
+
+        string bounded = value.Substring(0, remainingDiagnosticCharacters);
+        remainingDiagnosticCharacters = 0;
+        truncated = true;
+        return bounded;
+    }
+
+    private static int GetLongestBacktickRun(string value)
+    {
+        int longest = 0;
+        int current = 0;
+        foreach (char character in value)
+        {
+            current = character == '`' ? current + 1 : 0;
+            longest = Math.Max(longest, current);
+        }
+
+        return longest;
+    }
+
+    private static void AppendOmittedFailures(StringBuilder builder, long omittedFailures)
+    {
+        if (omittedFailures > 0)
+        {
+            builder.Append('_').Append(omittedFailures.ToString(CultureInfo.InvariantCulture))
+                .Append(" additional failure").Append(omittedFailures == 1 ? string.Empty : "s")
+                .Append(" omitted (limit 20)._");
+        }
+
+        builder.Append('\n');
+    }
 
     private static bool HasDuplicateModuleIdentity(IReadOnlyList<CiRunSummaryModule> modules, CiRunSummaryModule module)
         => modules.Count(candidate =>

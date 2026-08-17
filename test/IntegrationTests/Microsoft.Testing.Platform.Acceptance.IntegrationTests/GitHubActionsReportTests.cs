@@ -35,7 +35,19 @@ public sealed class GitHubActionsReportTests : AcceptanceTestBase<GitHubActionsR
     [TestMethod]
     public async Task WhenTestFails_EmitsPerTestAnnotationButNoExitCodeCallout(string tfm)
     {
-        (TestHostResult result, string summary) = await RunAsync(tfm, testMode: "fail");
+        string workspace = Path.Combine(TestContext.TestRunDirectory!, $"gh-failure-workspace-{Guid.NewGuid():N}");
+        string sourceFile = Path.Combine(workspace, "src", "FailingTests.cs");
+        Directory.CreateDirectory(Path.GetDirectoryName(sourceFile)!);
+        File.WriteAllText(sourceFile, "// test source");
+
+        (TestHostResult result, string summary) = await RunAsync(
+            tfm,
+            testMode: "fail",
+            extraEnvironmentVariables: new Dictionary<string, string?>
+            {
+                ["GITHUB_WORKSPACE"] = workspace,
+                ["GH_TEST_FILE"] = sourceFile,
+            });
 
         result.AssertExitCodeIs(ExitCode.AtLeastOneTestFailed);
 
@@ -45,6 +57,12 @@ public sealed class GitHubActionsReportTests : AcceptanceTestBase<GitHubActionsR
         result.AssertOutputDoesNotContain("::error title=Test run failed");
         Assert.Contains("❌ Test Run Summary", summary);
         Assert.DoesNotContain("[!WARNING]", summary);
+        Assert.Contains("<summary><code>FailingTest</code> — 2.40s</summary>", summary);
+        Assert.Contains("**Exception:** `ReportedFailureException`", summary);
+        Assert.Contains("**Location:** `src/FailingTests.cs:17`", summary);
+        Assert.Contains("Expected 1 but got 2", summary);
+        Assert.Contains("at FailingTests.FailingTest() in ", summary);
+        Assert.Contains(":line 17", summary);
     }
 
     [DynamicData(nameof(TargetFrameworks.AllForDynamicData), typeof(TargetFrameworks))]
@@ -203,13 +221,22 @@ public class DummyTestFramework : ITestFramework, IDataProducer
 
         if (mode == "fail")
         {
+            string file = Environment.GetEnvironmentVariable("GH_TEST_FILE")!;
+            DateTimeOffset start = DateTimeOffset.UtcNow;
             await context.MessageBus.PublishAsync(this, new TestNodeUpdateMessage(
                 context.Request.Session.SessionUid,
                 new TestNode()
                 {
                     Uid = "test-1",
                     DisplayName = "FailingTest",
-                    Properties = new PropertyBag(new FailedTestNodeStateProperty("Expected 1 but got 2")),
+                    Properties = new PropertyBag(
+                        new FailedTestNodeStateProperty(
+                            new ReportedFailureException(
+                                "Assertion failed",
+                                $"   at FailingTests.FailingTest() in {file}:line 17"),
+                            "Expected 1 but got 2"),
+                        new TimingProperty(new TimingInfo(start, start.AddSeconds(2.4), TimeSpan.FromSeconds(2.4))),
+                        new TestFileLocationProperty(file, new LinePositionSpan(new LinePosition(11, -1), new LinePosition(11, -1)))),
                 }));
         }
         else if (mode == "location")
@@ -253,6 +280,11 @@ public class DummyTestFramework : ITestFramework, IDataProducer
         // mode == "zero": publish nothing.
         context.Complete();
     }
+}
+
+public sealed class ReportedFailureException(string message, string stackTrace) : Exception(message)
+{
+    public override string StackTrace => stackTrace;
 }
 """;
 

@@ -5,17 +5,35 @@ using Microsoft.Testing.Platform.Extensions.Messages;
 
 namespace Microsoft.Testing.Extensions;
 
+#pragma warning disable RS0051 // Shared implementation details are compiled into multiple extension assemblies.
+
 /// <summary>
 /// A single captured test result used by the markdown summary reporters (Azure DevOps and GitHub Actions).
 /// </summary>
 internal readonly struct TestRecord
 {
-    public TestRecord(string displayName, string fullyQualifiedName, TerminalKind kind, TimeSpan duration)
+    public TestRecord(
+        string displayName,
+        string fullyQualifiedName,
+        TerminalKind kind,
+        TimeSpan duration,
+        string? explanation = null,
+        string? exceptionMessage = null,
+        string? exceptionType = null,
+        string? stackTrace = null,
+        string? sourceFilePath = null,
+        int sourceLineNumber = 0)
     {
         DisplayName = displayName;
         FullyQualifiedName = fullyQualifiedName;
         Kind = kind;
         Duration = duration;
+        Explanation = explanation;
+        ExceptionMessage = exceptionMessage;
+        ExceptionType = exceptionType;
+        StackTrace = stackTrace;
+        SourceFilePath = sourceFilePath;
+        SourceLineNumber = sourceLineNumber;
     }
 
     public string DisplayName { get; }
@@ -25,6 +43,18 @@ internal readonly struct TestRecord
     public TerminalKind Kind { get; }
 
     public TimeSpan Duration { get; }
+
+    public string? Explanation { get; }
+
+    public string? ExceptionMessage { get; }
+
+    public string? ExceptionType { get; }
+
+    public string? StackTrace { get; }
+
+    public string? SourceFilePath { get; }
+
+    public int SourceLineNumber { get; }
 }
 
 /// <summary>
@@ -89,3 +119,5 @@ internal static class SummaryReporterHelpers
         return string.Format(CultureInfo.InvariantCulture, hourFormat, totalHours, duration.Minutes, duration.Seconds);
     }
 }
+
+#pragma warning restore RS0051

@@ -56,6 +56,18 @@ internal sealed class CiRunSummaryTest
     public string FullyQualifiedName { get; set; } = string.Empty;
 
     public long DurationTicks { get; set; }
+
+    public string? Explanation { get; set; }
+
+    public string? ExceptionMessage { get; set; }
+
+    public string? ExceptionType { get; set; }
+
+    public string? StackTrace { get; set; }
+
+    public string? SourceFilePath { get; set; }
+
+    public int SourceLineNumber { get; set; }
 }
 
 internal sealed class CiRunSummaryFailingClass
@@ -114,7 +126,7 @@ internal sealed class CiRunSummaryAggregate
 
 internal static partial class CiRunSummaryAggregation
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private const int MaxFailures = 20;
     private const int MaxSlowestTests = 10;
     private const int MaxTopFailingClasses = 5;
@@ -390,7 +402,8 @@ internal static partial class CiRunSummaryAggregation
     private static bool IsValidTest(CiRunSummaryTest test)
         => !RoslynString.IsNullOrWhiteSpace(test.DisplayName)
             && !RoslynString.IsNullOrWhiteSpace(test.FullyQualifiedName)
-            && test.DurationTicks >= 0;
+            && test.DurationTicks >= 0
+            && test.SourceLineNumber >= 0;
 
     private static int CompareModules(CiRunSummaryModule left, CiRunSummaryModule right)
     {
@@ -412,6 +425,12 @@ internal static partial class CiRunSummaryAggregation
             DisplayName = record.DisplayName,
             FullyQualifiedName = record.FullyQualifiedName,
             DurationTicks = record.Duration.Ticks,
+            Explanation = record.Explanation,
+            ExceptionMessage = record.ExceptionMessage,
+            ExceptionType = record.ExceptionType,
+            StackTrace = record.StackTrace,
+            SourceFilePath = record.SourceFilePath,
+            SourceLineNumber = record.SourceLineNumber,
         };
 
     private static string GetClassName(string fullyQualifiedName)

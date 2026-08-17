@@ -233,10 +233,13 @@ internal sealed class GitHubActionsAnnotationReporter :
         // Prefer the exception's call site: it points at the exact statement that failed. Only when no frame
         // resolves to a file in the workspace (no exception at all, a trimmed/PDB-less stack, or a framework
         // that reports failures without a usable trace) do we fall back to the test's declared location.
-        (string RelativeNormalizedPath, int LineNumber)? stackLocation = StackTraceSourceLocationResolver.TryResolve(exception?.StackTrace, repoRoot, fileSystem, logger, skipAssertionFrames);
-        GitHubActionsSourceLocation? location = stackLocation is { } resolved
-            ? new GitHubActionsSourceLocation(resolved.RelativeNormalizedPath, resolved.LineNumber)
-            : declaredLocation;
+        GitHubActionsSourceLocation? location = GitHubActionsSourceLocationResolver.Resolve(
+            exception,
+            repoRoot,
+            fileSystem,
+            logger,
+            skipAssertionFrames,
+            declaredLocation);
 
         return FormatAnnotation("error", title, message, location);
     }
@@ -290,23 +293,7 @@ internal sealed class GitHubActionsAnnotationReporter :
     /// running through the bridge that supplies source information.
     /// </remarks>
     internal static /* for testing */ GitHubActionsSourceLocation? TryResolveDeclaredLocation(TestNode testNode, string? repoRoot, IFileSystem fileSystem)
-    {
-        if (testNode.Properties.FirstOrDefault<TestFileLocationProperty>() is not { } fileLocation)
-        {
-            return null;
-        }
-
-        string? relativeNormalizedPath = StackTraceSourceLocationResolver.TryMakeWorkspaceRelative(fileLocation.FilePath, repoRoot, fileSystem);
-        if (relativeNormalizedPath is null)
-        {
-            return null;
-        }
-
-        // A framework that knows the file but not the line reports a sentinel (-1) or 0; GitHub accepts a
-        // 'file'-only annotation, so drop the line rather than emitting an invalid one.
-        int line = fileLocation.LineSpan.Start.Line;
-        return new GitHubActionsSourceLocation(relativeNormalizedPath, line > 0 ? line : 0);
-    }
+        => GitHubActionsSourceLocationResolver.TryResolveDeclaredLocation(testNode, repoRoot, fileSystem);
 
     private static string FormatAnnotation(string command, string title, string message, GitHubActionsSourceLocation? location)
         => location switch
